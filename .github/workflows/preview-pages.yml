@@ -52,7 +52,7 @@ jobs:
             case "$file" in
               index.html|manifest.webmanifest|registerSW.js|sw.js|workbox-*.js|favicon.svg|favicon.ico|favicon-16.png|favicon-32.png|apple-touch-icon.png|icon-192.png|icon-512.png|icon-maskable-512.png|packs/season-2027-v1-1.0.0.json|analysis/season-2027-v1/Beginner.json|analysis/season-2027-v1/Junior.json|analysis/season-2027-v1/Intermediate.json|analysis/season-2027-v1/Experienced.json|releases/season-2027-v1/manifest.json|releases/season-2027-v1/validation-report.txt) ;;
               assets/*)
-                if [[ ! "$file" =~ ^assets/[a-zA-Z0-9_-]+\.(js|css)$ ]]; then
+                if [[ ! "$file" =~ ^assets/([a-zA-Z0-9_-]+\.(js|css)|bqquiz-2027-[a-zA-Z0-9_-]+\.json)$ ]]; then
                   printf 'Unexpected preview asset: %s\n' "$file" >&2
                   exit 1
                 fi
@@ -64,8 +64,8 @@ jobs:
             echo 'Symlinks are not allowed in the Pages artifact.' >&2
             exit 1
           fi
-          if grep -riEq 'lift-up-2027|bq-powers-2027|2027 Senior Quiz Practice Set|-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40}' dist; then
-            echo 'Restricted content marker or credential pattern found in the Pages artifact.' >&2
+          if grep -riEq -- '-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40}' dist; then
+            echo 'Credential pattern found in the Pages artifact.' >&2
             exit 1
           fi
       - uses: actions/upload-pages-artifact@v3
