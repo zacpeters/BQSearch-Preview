@@ -1,0 +1,87 @@
+name: Deploy BQ Search preview
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 9 * * *'
+  push:
+    branches: [main]
+    paths: ['.github/workflows/preview-pages.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'zacpeters/BQSearch-Preview' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out integration branch
+        uses: actions/checkout@v4
+        with:
+          repository: zacpeters/BQSearch
+          ref: refs/heads/feature/bqquiz-integration
+          persist-credentials: false
+      - name: Record source revision
+        run: git rev-parse HEAD
+      - uses: actions/configure-pages@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run validate:packs
+      - run: npm test
+      - run: npm run build
+        env:
+          VITE_BASE_PATH: /BQSearch-Preview/
+          VITE_ENABLE_QUIZZES: 'true'
+      - name: Check public artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s dist/index.html
+          test -s dist/sw.js
+          grep -Fq '/BQSearch-Preview/assets/' dist/index.html
+          grep -Fq '/BQSearch-Preview/sw.js' dist/registerSW.js
+          while IFS= read -r -d '' file; do
+            case "$file" in
+              index.html|manifest.webmanifest|registerSW.js|sw.js|workbox-*.js|favicon.svg|favicon.ico|favicon-16.png|favicon-32.png|apple-touch-icon.png|icon-192.png|icon-512.png|icon-maskable-512.png|packs/season-2027-v1-1.0.0.json|analysis/season-2027-v1/Beginner.json|analysis/season-2027-v1/Junior.json|analysis/season-2027-v1/Intermediate.json|analysis/season-2027-v1/Experienced.json|releases/season-2027-v1/manifest.json|releases/season-2027-v1/validation-report.txt) ;;
+              assets/*)
+                if [[ ! "$file" =~ ^assets/[a-zA-Z0-9_-]+\.(js|css)$ ]]; then
+                  printf 'Unexpected preview asset: %s\n' "$file" >&2
+                  exit 1
+                fi
+                ;;
+              *) printf 'Unexpected preview file: %s\n' "$file" >&2; exit 1 ;;
+            esac
+          done < <(find dist -mindepth 1 ! -type d -print0 | sed -z 's|^dist/||')
+          if find dist -type l -print -quit | grep -q .; then
+            echo 'Symlinks are not allowed in the Pages artifact.' >&2
+            exit 1
+          fi
+          if grep -riEq 'lift-up-2027|bq-powers-2027|2027 Senior Quiz Practice Set|-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40}' dist; then
+            echo 'Restricted content marker or credential pattern found in the Pages artifact.' >&2
+            exit 1
+          fi
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy preview
+        id: deployment
+        uses: actions/deploy-pages@v4
